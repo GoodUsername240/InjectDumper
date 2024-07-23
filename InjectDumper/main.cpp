@@ -24,7 +24,6 @@ BYTE hook[] = {
 
 // Globals
 HANDLE hStdout;
-HANDLE hLogFile;
 void* AllocatedMemory[256] = { 0 };
 void* TempAllocatedMemory[256] = { 0 };
 char MutexName[MAX_PATH] = { 0 };
@@ -193,8 +192,6 @@ LONG ExceptionHandler(EXCEPTION_POINTERS* pException) {
 		char buf[124];
 		wsprintf(buf, GOOD "Caught possible thread hijacking injection at %p\n", pException->ExceptionRecord->ExceptionAddress);
 		WriteConsoleA(hStdout, buf, lstrlen(buf), NULL, NULL);
-		wsprintf(buf, "%p\n", pException->ExceptionRecord->ExceptionAddress);
-		WriteFile(hLogFile, buf, strlen(buf), NULL, NULL);
 		CheckAllocatedMemory();
 
 		// Dump the attempted shellcode
@@ -339,8 +336,6 @@ bool hkRtlUserThreadStart(void* pRoutine, void* Param1) {
 			wsprintf(buf, BAD "Failed to copy file %ls\n", Param1);
 			WriteConsole(hStdout, buf, lstrlen(buf), NULL, NULL);
 		}
-		wsprintf(buf, "LoadLibrary: %ls\n", Param1);
-		WriteFile(hLogFile, buf, lstrlen(buf), NULL, NULL);
 	} else if (pRoutine == Funcs::pLoadLibraryA || pRoutine == Funcs::pLoadLibraryExA) {
 		wsprintf(buf, EXTRA "Attempted LoadLibrary injection, DLL: %s\n", Param1);
 		WriteConsole(hStdout, buf, lstrlen(buf), NULL, NULL);
@@ -353,11 +348,6 @@ bool hkRtlUserThreadStart(void* pRoutine, void* Param1) {
 			wsprintf(buf, BAD "Failed to copy file %s\n", Param1);
 			WriteConsole(hStdout, buf, lstrlen(buf), NULL, NULL);
 		}
-		wsprintf(buf, "LoadLibrary: %s\n", Param1);
-		WriteFile(hLogFile, buf, lstrlen(buf), NULL, NULL);
-	} else {
-		wsprintf(buf, "%p\n", pRoutine);
-		WriteFile(hLogFile, buf, lstrlen(buf), NULL, NULL);
 	}
 
 	// Get memory info
@@ -383,7 +373,7 @@ void hkLoadLibraryW(wchar_t* pDll) {
 	char buf[MAX_PATH];
 	wsprintf(buf, "%ls", pDll);
 	hkLoadLibraryA(buf);
-	exit(1);
+	_exit(1); // exit for safety
 }
 
 void hkLoadLibraryA(char* pDll) {
@@ -393,10 +383,7 @@ void hkLoadLibraryA(char* pDll) {
 	}
 
 	CopyFile(pDll, pDll + i, FALSE);
-	char buf[124];
-	wsprintf(buf, "Injection reached LoadLibrary function, exiting for safety (%s)\n", pDll);
-	WriteFile(hLogFile, buf, lstrlen(buf), NULL, NULL);
-	exit(1);
+	_exit(1); // exit for safety
 }
 
 
@@ -472,7 +459,6 @@ int main(int argc, char** argv) {
 	
 	// Extra setup stuff
 	dwMainThreadId = GetCurrentThreadId();
-	hLogFile = CreateFile("Threads.txt", GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 	CheckAllocatedMemory(false);
 	SetProcessDEPPolicy(PROCESS_DEP_ENABLE);
 	if (!AddVectoredExceptionHandler(1, (PVECTORED_EXCEPTION_HANDLER)ExceptionHandler)) {
